@@ -12,6 +12,7 @@
 #include "Aimbot.hpp"
 #include "navparser.hpp"
 #include "MiscAimbot.hpp"
+#include "Misc.hpp"
 
 namespace hacks::tf2::NavBot
 {
@@ -33,6 +34,7 @@ static settings::Int blacklist_delay("navbot.proximity-blacklist.delay", "500");
 static settings::Boolean blacklist_dormat("navbot.proximity-blacklist.dormant", "false");
 static settings::Int blacklist_delay_dormat("navbot.proximity-blacklist.delay-dormant", "1000");
 static settings::Int blacklist_slightdanger_limit("navbot.proximity-blacklist.slight-danger.amount", "2");
+static settings::Boolean engie_mode("navbot.engineer-mode", "true");
 #if ENABLE_VISUALS
 static settings::Boolean draw_danger("navbot.draw-danger", "false");
 #endif
@@ -53,10 +55,12 @@ struct bot_class_config
     bool prefer_far;
 };
 
-constexpr bot_class_config CONFIG_SHORT_RANGE = { 140.0f, 400.0f, 600.0f, false };
-constexpr bot_class_config CONFIG_MID_RANGE   = { 200.0f, 500.0f, 3000.0f, true };
-constexpr bot_class_config CONFIG_LONG_RANGE  = { 300.0f, 500.0f, 4000.0f, true };
-bot_class_config selected_config              = CONFIG_MID_RANGE;
+constexpr bot_class_config CONFIG_SHORT_RANGE         = { 140.0f, 400.0f, 600.0f, false };
+constexpr bot_class_config CONFIG_MID_RANGE           = { 200.0f, 500.0f, 3000.0f, true };
+constexpr bot_class_config CONFIG_LONG_RANGE          = { 300.0f, 500.0f, 4000.0f, true };
+constexpr bot_class_config CONFIG_ENGINEER            = { 200.0f, 500.0f, 3000.0f, false };
+constexpr bot_class_config CONFIG_GUNSLINGER_ENGINEER = { 50.0f, 300.0f, 2000.0f, false };
+bot_class_config selected_config                      = CONFIG_MID_RANGE;
 
 static Timer health_cooldown{};
 static Timer ammo_cooldown{};
@@ -185,11 +189,11 @@ bool getHealth(bool low_priority = false)
 }
 
 // Find ammo if needed
-bool getAmmo()
+bool getAmmo(bool force = false)
 {
-    if (!ammo_cooldown.check(1000))
+    if (!force && !ammo_cooldown.check(1000))
         return navparser::NavEngine::current_priority == ammo;
-    if (shouldSearchAmmo())
+    if (force || shouldSearchAmmo())
     {
         // Already pathing, only try to repath every 2s
         if (navparser::NavEngine::current_priority == ammo)
@@ -239,6 +243,162 @@ void refreshSniperSpots()
             // Spots actually marked for sniping
             if (hiding_spot.IsExposed() || hiding_spot.IsGoodSniperSpot() || hiding_spot.IsIdealSniperSpot())
                 sniper_spots.emplace_back(hiding_spot.m_pos);
+}
+
+static std::pair<CachedEntity *, float> getNearestPlayerDistance()
+{
+    float distance         = FLT_MAX;
+    CachedEntity *best_ent = nullptr;
+    for (int i = 1; i <= g_IEngine->GetMaxClients(); i++)
+    {
+        CachedEntity *ent = ENTITY(i);
+        if (CE_VALID(ent) && ent->m_vecDormantOrigin() && ent->m_bAlivePlayer() && ent->m_bEnemy() && g_pLocalPlayer->v_Origin.DistTo(ent->m_vecOrigin()) < distance && player_tools::shouldTarget(ent) && !IsPlayerInvisible(ent))
+        {
+            distance = g_pLocalPlayer->v_Origin.DistTo(*ent->m_vecDormantOrigin());
+            best_ent = ent;
+        }
+    }
+    return { best_ent, distance };
+}
+
+static std::vector<Vector> building_spots;
+
+inline bool HasGunslinger(CachedEntity *ent)
+{
+    return HasWeapon(ent, 142);
+}
+
+inline bool isEngieMode()
+{
+    return *engie_mode && g_pLocalPlayer->clazz == tf_engineer;
+}
+
+bool BlacklistedFromBuilding(CNavArea *area)
+{
+    // FIXME: Better way of doing this ?
+    for (auto blacklisted_area : *navparser::NavEngine::getFreeBlacklist())
+    {
+        if (blacklisted_area.first == area && blacklisted_area.second.value == navparser::BlacklistReason_enum::BAD_BUILDING_SPOT)
+            return true;
+    }
+    return false;
+}
+
+static Timer refresh_buildingspots_timer;
+void refreshBuildingSpots(bool force = false)
+{
+    if (!isEngieMode())
+        return;
+    if (force || refresh_buildingspots_timer.test_and_set(5000))
+    {
+        building_spots.clear();
+        std::optional<Vector> target;
+
+        auto our_flag = flagcontroller::getFlag(g_pLocalPlayer->team);
+        target        = our_flag.spawn_pos;
+
+        if (!target)
+        {
+            auto nearest = getNearestPlayerDistance();
+            if (CE_GOOD(nearest.first))
+                target = *nearest.first->m_vecDormantOrigin();
+        }
+        if (target)
+        {
+            // Search all nav areas for valid spots
+            for (auto &area : navparser::NavEngine::getNavFile()->m_areas)
+            {
+                // Blacklisted :(
+                if (BlacklistedFromBuilding(&area))
+                    continue;
+                // BUG Ahead, these flag checks dont seem to work for me :/
+                // Don't try to build in spawn lol
+                if ((area.m_TFattributeFlags & TF_NAV_SPAWN_ROOM_RED) != 0 || (area.m_TFattributeFlags & TF_NAV_SPAWN_ROOM_BLUE) != 0 || (area.m_TFattributeFlags & TF_NAV_SPAWN_ROOM_EXIT) != 0)
+                    continue;
+                if ((area.m_TFattributeFlags & TF_NAV_SENTRY_SPOT) != 0)
+                    building_spots.emplace_back(area.m_center);
+                else
+                {
+                    for (auto &hiding_spot : area.m_hidingSpots)
+                        if (hiding_spot.HasGoodCover())
+                            building_spots.emplace_back(hiding_spot.m_pos);
+                }
+            }
+            // Sort by distance to nearest, lower is better
+            // TODO: This isnt really optimal, need a dif way to where it is a good distance from enemies but also bots dont build in the same spot
+            std::sort(building_spots.begin(), building_spots.end(), [target](Vector a, Vector b) { return a.DistTo(*target) < b.DistTo(*target); });
+        }
+    }
+}
+
+static CachedEntity *mySentry    = nullptr;
+static CachedEntity *myDispenser = nullptr;
+
+void refreshLocalBuildings()
+{
+    if (isEngieMode())
+    {
+        mySentry    = nullptr;
+        myDispenser = nullptr;
+        if (CE_GOOD(LOCAL_E))
+        {
+            for (int i = g_IEngine->GetMaxClients() + 1; i < MAX_ENTITIES; i++)
+            {
+                CachedEntity *ent = ENTITY(i);
+                if (!ent || CE_BAD(ent) || ent->m_bEnemy() || !ent->m_bAlivePlayer())
+                    continue;
+                auto cid = ent->m_iClassID();
+                if (cid != CL_CLASS(CObjectSentrygun) && cid != CL_CLASS(CObjectDispenser))
+                    continue;
+                if (HandleToIDX(CE_INT(ent, netvar.m_hBuilder)) != LOCAL_E->m_IDX)
+                    continue;
+                if (CE_INT(ent, netvar.m_bPlacing))
+                    continue;
+                if (cid == CL_CLASS(CObjectSentrygun))
+                    mySentry = ent;
+                else if (cid == CL_CLASS(CObjectDispenser))
+                    myDispenser = ent;
+            }
+        }
+    }
+}
+
+static Vector current_building_spot;
+static bool navToSentrySpot()
+{
+    static Timer wait_until_path_sentry;
+    // Wait a bit before pathing again
+    if (!wait_until_path_sentry.test_and_set(300))
+        return false;
+    // Try to nav to our existing sentry spot
+    if (CE_GOOD(mySentry) && mySentry->m_bAlivePlayer() && mySentry->m_vecDormantOrigin())
+    {
+        if (navparser::NavEngine::navTo(*mySentry->m_vecDormantOrigin(), engineer))
+            return true;
+    }
+    else
+        mySentry = nullptr;
+
+    // No building spots
+    if (building_spots.empty())
+        return false;
+    // Don't overwrite current nav
+    if (navparser::NavEngine::current_priority == engineer)
+        return false;
+    // Max 10 attempts
+    for (int attempts = 0; attempts < 10 && attempts < building_spots.size(); ++attempts)
+    {
+        // Get a random building spot
+        auto random = select_randomly(building_spots.begin(), building_spots.end());
+        // Try to nav there
+        if (navparser::NavEngine::navTo(*random, engineer))
+        {
+            current_building_spot = *random;
+            return true;
+        }
+    }
+
+    return false;
 }
 
 enum slots
@@ -750,6 +910,146 @@ bool snipeSentries()
     return false;
 }
 
+enum building
+{
+    dispenser = 0,
+    sentry    = 2
+};
+
+static int build_attempts = 0;
+static bool buildBuilding(int building)
+{
+    // Blacklist this spot and refresh the building spots
+    if (build_attempts >= 15)
+    {
+        (*navparser::NavEngine::getFreeBlacklist())[navparser::NavEngine::findClosestNavSquare(g_pLocalPlayer->v_Origin)] = navparser::BlacklistReason_enum::BAD_BUILDING_SPOT;
+        refreshBuildingSpots(true);
+        current_building_spot.Invalidate();
+        build_attempts = 0;
+        return false;
+    }
+    // Make sure we have right amount of ammo
+    int required = (HasGunslinger(LOCAL_E) || building == dispenser) ? 100 : 130;
+    if (CE_INT(LOCAL_E, netvar.m_iAmmo + 12) < required)
+        return getAmmo(true);
+
+    // Try to build! we are close enough
+    if (current_building_spot.IsValid() && current_building_spot.DistTo(g_pLocalPlayer->v_Origin) <= 200.0f)
+    {
+        // TODO: Rotate our angle to a valid building spot ? also rotate building itself to face enemies ?
+        current_user_cmd->viewangles.x = 20.0f;
+        current_user_cmd->viewangles.y += 2.0f;
+
+        // Gives us 4 1/2 seconds to build
+        static Timer attempt_timer;
+        if (attempt_timer.test_and_set(300))
+            build_attempts++;
+
+        if (hacks::shared::misc::getCarriedBuilding() == -1)
+        {
+            static Timer command_timer;
+            if (command_timer.test_and_set(100))
+                g_IEngine->ClientCmd_Unrestricted(strfmt("build %d", building).get());
+        }
+        else if (CE_INT(ENTITY(hacks::shared::misc::getCarriedBuilding()), netvar.m_bCanPlace))
+            current_user_cmd->buttons |= IN_ATTACK;
+        return true;
+    }
+    else
+        return navToSentrySpot();
+
+    return false;
+}
+
+static bool buildingNeedsToBeSmacked(CachedEntity *ent)
+{
+    if (CE_BAD(ent))
+        return false;
+
+    if (CE_INT(ent, netvar.iUpgradeLevel) != 3 || ent->m_iHealth() / ent->m_iMaxHealth() <= 0.80f)
+        return true;
+    if (ent->m_iClassID() == CL_CLASS(CObjectSentrygun))
+    {
+        int max_ammo = 0;
+        switch (CE_INT(ent, netvar.iUpgradeLevel))
+        {
+        case 1:
+            max_ammo = 150;
+            break;
+        case 2:
+        case 3:
+            max_ammo = 200;
+            break;
+        }
+
+        return CE_INT(ent, netvar.m_iAmmoShells) / max_ammo <= 0.50f;
+    }
+    return false;
+}
+
+static bool smackBuilding(CachedEntity *ent)
+{
+    if (CE_BAD(ent))
+        return false;
+    if (!CE_INT(LOCAL_E, netvar.m_iAmmo + 12))
+        return getAmmo(true);
+
+    if (ent->m_flDistance() <= 100.0f && g_pLocalPlayer->weapon_mode == weapon_melee)
+    {
+        AimAt(g_pLocalPlayer->v_Eye, GetBuildingPosition(ent), current_user_cmd);
+        current_user_cmd->buttons |= IN_ATTACK;
+    }
+    else
+        return navparser::NavEngine::navTo(*ent->m_vecDormantOrigin(), engineer);
+    return true;
+}
+
+static bool runEngineerLogic()
+{
+    if (!isEngieMode())
+        return false;
+
+    // Already have a sentry
+    if (CE_VALID(mySentry) && mySentry->m_bAlivePlayer())
+    {
+        if (HasGunslinger(LOCAL_E))
+        {
+            // Too far away, destroy it
+            // BUG Ahead, building isnt destroyed lol
+            if (mySentry->m_flDistance() >= 1800.0f)
+            {
+                // If we have a valid building
+                if (mySentry->m_Type() == CL_CLASS(CObjectSentrygun))
+                    g_IEngine->ClientCmd_Unrestricted("destroy 2");
+            }
+            // Return false so we run another task
+            return false;
+        }
+        else
+        {
+            // Try to smack sentry first
+            if (buildingNeedsToBeSmacked(mySentry))
+                return smackBuilding(mySentry);
+            else
+            {
+                // We put dispenser by sentry
+                if (CE_BAD(myDispenser))
+                    return buildBuilding(dispenser);
+                else
+                {
+                    // We already have a dispenser, see if it needs to be smacked
+                    if (buildingNeedsToBeSmacked(myDispenser))
+                        return smackBuilding(myDispenser);
+                }
+            }
+        }
+    }
+    else
+        // Try to build a sentry
+        return buildBuilding(sentry);
+    return false;
+}
+
 enum capture_type
 {
     no_capture,
@@ -1006,22 +1306,6 @@ bool escapeDanger()
     return false;
 }
 
-static std::pair<CachedEntity *, float> getNearestPlayerDistance()
-{
-    float distance         = FLT_MAX;
-    CachedEntity *best_ent = nullptr;
-    for (int i = 1; i <= g_IEngine->GetMaxClients(); i++)
-    {
-        CachedEntity *ent = ENTITY(i);
-        if (CE_VALID(ent) && ent->m_vecDormantOrigin() && ent->m_bAlivePlayer() && ent->m_bEnemy() && g_pLocalPlayer->v_Origin.DistTo(ent->m_vecOrigin()) < distance && player_tools::shouldTarget(ent) && !IsPlayerInvisible(ent))
-        {
-            distance = g_pLocalPlayer->v_Origin.DistTo(*ent->m_vecDormantOrigin());
-            best_ent = ent;
-        }
-    }
-    return { best_ent, distance };
-}
-
 static int slot = primary;
 
 static void autoJump(std::pair<CachedEntity *, float> &nearest)
@@ -1125,6 +1409,8 @@ void CreateMove()
         return;
 
     refreshSniperSpots();
+    refreshLocalBuildings();
+    refreshBuildingSpots();
 
     if (danger_config_custom)
     {
@@ -1138,6 +1424,9 @@ void CreateMove()
         case tf_scout:
         case tf_heavy:
             selected_config = CONFIG_SHORT_RANGE;
+            break;
+        case tf_engineer:
+            selected_config = isEngieMode() ? HasGunslinger(LOCAL_E) ? CONFIG_GUNSLINGER_ENGINEER : CONFIG_ENGINEER : CONFIG_SHORT_RANGE;
             break;
         case tf_sniper:
             selected_config = g_pLocalPlayer->weapon()->m_iClassID() == CL_CLASS(CTFCompoundBow) ? CONFIG_MID_RANGE : CONFIG_LONG_RANGE;
@@ -1161,6 +1450,9 @@ void CreateMove()
         return;
     // If we aren't getting health, get ammo
     else if (getAmmo())
+        return;
+    // Try to run engineer logic
+    else if (runEngineerLogic())
         return;
     else if (meleeAttack(slot, nearest))
         return;

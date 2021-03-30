@@ -16,6 +16,7 @@ enum Priority_list
     followbot,
     ammo,
     capture,
+    engineer,
     prio_melee,
     health,
     danger,
@@ -36,6 +37,7 @@ enum BlacklistReason_enum
     STICKY,
     ENEMY_NORMAL,
     ENEMY_DORMANT,
+    BAD_BUILDING_SPOT,
     // Always last
     BLACKLIST_LENGTH
 };
