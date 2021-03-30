@@ -1371,6 +1371,20 @@ static slots getBestSlot(slots active_slot, std::pair<CachedEntity *, float> &ne
         else
             return primary;
     }
+    case tf_engineer:
+    {
+        if (((CE_GOOD(mySentry) && mySentry->m_flDistance() <= 300) || (CE_GOOD(myDispenser) && myDispenser->m_flDistance() <= 300)) || (current_building_spot.IsValid() && current_building_spot.DistTo(g_pLocalPlayer->v_Origin) <= 300.0f))
+        {
+            if (active_slot >= melee)
+                return active_slot;
+            else
+                return melee;
+        }
+        else if (nearest.second <= 500)
+            return primary;
+        else
+            return secondary;
+    }
     default:
     {
         if (nearest.second <= 400)
