@@ -30,13 +30,14 @@
             <AutoVariable width="fill" target="remove.arms" label="Remove arms"/>
             <AutoVariable width="fill" target="remove.cloak" label="Remove cloak"/>
             <AutoVariable width="fill" target="remove.disguise" label="Remove disguise"/>
+            <AutoVariable width="fill" target="remove.taunts" label="Remove taunts"/>
             <AutoVariable width="fill" target="remove.hats" label="Remove hats"/>
             <AutoVariable width="fill" target="remove.contracker" label="Remove contracker"/>
             <AutoVariable width="fill" target="remove.scope" label="Remove scope"/>
             <AutoVariable width="fill" target="remove.zoom" label="Remove zoom/keep rifle" tooltip="Disables scope zoom and keeps the sniper rifle. Enabling Remove scope as well will set zoom_sensitivity_ratio to 4 when zooming in."/>
         </List>
     </Box>
-    <Box padding="12 6 6 6" width="content" height="content" name="Misc" x="195" y="125">
+    <Box padding="12 6 6 6" width="content" height="content" name="Misc" x="195" y="135">
         <List width="180">
             <AutoVariable width="fill" target="visual.night-mode.gui" label="Nightmode (GUI)" min="0" max="100" step="0.1"/>
             <AutoVariable width="fill" target="visual.night-mode.world" label="Nightmode (world)" min="0" max="100" step="0.1"/>

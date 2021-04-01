@@ -66,6 +66,9 @@ void NetVars::Init()
         this->m_bCarryingObject         = gNetvars.get_offset("DT_TFPlayer", "m_Shared", "m_bCarryingObject");
         this->m_hCarriedObject          = gNetvars.get_offset("DT_TFPlayer", "m_Shared", "m_hCarriedObject");
         this->m_nSequence               = gNetvars.get_offset("DT_BaseAnimating", "m_nSequence");
+        this->m_flPoseParameter         = gNetvars.get_offset("DT_BaseAnimating", "m_flPoseParameter");
+        this->m_flModelScale            = gNetvars.get_offset("DT_BaseAnimating", "m_flModelScale");
+        this->m_flEncodedController     = gNetvars.get_offset("DT_BaseAnimating", "m_flEncodedController");
         this->m_iTauntIndex             = gNetvars.get_offset("DT_TFPlayer", "m_Shared", "m_iTauntIndex");
         this->m_iTauntConcept           = gNetvars.get_offset("DT_TFPlayer", "m_Shared", "m_iTauntConcept");
         this->m_bViewingCYOAPDA         = gNetvars.get_offset("DT_TFPlayer", "m_bViewingCYOAPDA");

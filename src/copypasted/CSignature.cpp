@@ -225,5 +225,10 @@ uintptr_t CSignature::GetVstdSignature(const char *chPattern)
 {
     return GetSignature(chPattern, sharedobj::vstdlib(), CSignature_space::vstd);
 }
+//===================================================================================
+uintptr_t CSignature::GetServerSignature(const char *chPattern)
+{
+    return GetSignature(chPattern, sharedobj::server(), CSignature_space::server);
+}
 
 CSignature gSignatures;

@@ -31,6 +31,7 @@ enum SharedObjects
     steamapi,
     vstd,
     launcher,
+    server,
     // Whatever you do, keep this one last
     entry_count
 };
@@ -47,6 +48,7 @@ public:
     static uintptr_t GetLauncherSignature(const char *chaPattern);
     static uintptr_t GetSteamAPISignature(const char *chPattern);
     static uintptr_t GetVstdSignature(const char *chPattern);
+    static uintptr_t GetServerSignature(const char *chPattern);
 };
 
 extern CSignature gSignatures;

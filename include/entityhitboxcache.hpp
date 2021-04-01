@@ -43,6 +43,9 @@ public:
     void Reset();
     matrix3x4_t *GetBones(int numbones = -1);
 
+    // for "fixing" bones to use the reconstructed ones
+    void UpdateBones();
+
     int m_nNumHitboxes;
     bool m_bModelSet;
     bool m_bInit;

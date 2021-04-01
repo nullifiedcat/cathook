@@ -148,6 +148,8 @@ void Update()
     for (int i = 0; i <= max; i++)
     {
         array[i].Update();
+        if (CE_GOOD((&array[i])))
+            array[i].hitboxes.UpdateBones();
     }
 }
 

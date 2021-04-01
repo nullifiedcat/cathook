@@ -57,6 +57,7 @@ class IEngineVGui;
 class IUniformRandomStream;
 class IFileSystem;
 class IMDLCache;
+class CServerTools;
 
 extern TFGCClientSystem *g_TFGCClientSystem;
 extern CHud *g_CHUD;
@@ -100,6 +101,7 @@ extern int *g_PredictionRandomSeed;
 extern IFileSystem *g_IFileSystem;
 extern IMDLCache *g_IMDLCache;
 extern IToolFrameworkInternal *g_IToolFramework;
+extern CServerTools *g_IServerTools;
 
 void CreateInterfaces();
 void CreateEarlyInterfaces();

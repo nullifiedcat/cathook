@@ -96,7 +96,7 @@ void dispatchUserMessage(bf_read &buffer, int type)
 
         kicked_player = target;
         logging::Info("Vote called to kick %s [U:1:%u] for %s by %s [U:1:%u]", info.name, info.friendsID, reason, info2.name, info2.friendsID);
-        if (target == LOCAL_E->m_IDX)
+        if (info.friendsID == g_ISteamUser->GetSteamID().GetAccountID())
         {
             was_local_player = true;
             local_kick_timer.update();
