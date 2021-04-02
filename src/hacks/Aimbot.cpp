@@ -26,7 +26,7 @@ static settings::Int aimkey_mode{ "aimbot.aimkey.mode", "1" };
 static settings::Boolean autoshoot{ "aimbot.autoshoot", "1" };
 static settings::Boolean autoreload{ "aimbot.autoshoot.activate-heatmaker", "false" };
 static settings::Boolean autoshoot_disguised{ "aimbot.autoshoot-disguised", "1" };
-static settings::Boolean multipoint{ "aimbot.multipoint", "false" };
+static settings::Int multipoint{ "aimbot.multipoint", "0" };
 static settings::Int hitbox_mode{ "aimbot.hitbox-mode", "0" };
 static settings::Float normal_fov{ "aimbot.fov", "0" };
 static settings::Int priority_mode{ "aimbot.priority-mode", "0" };
@@ -116,6 +116,102 @@ static void spectatorUpdate()
             fov      = *specfov;
         }
     };
+}
+
+// Get all the valid aim positions
+static std::vector<Vector> getValidHitpoints(CachedEntity *ent, int hitbox)
+{
+    // Recorded vischeckable points
+    std::vector<Vector> hitpoints;
+    auto hb = ent->hitboxes.GetHitbox(hitbox);
+
+    trace_t trace;
+    if (IsEntityVectorVisible(ent, hb->center, true, MASK_SHOT_HULL, &trace))
+    {
+        if (trace.hitbox == hitbox)
+            hitpoints.push_back(hb->center);
+    }
+
+    if (!multipoint)
+        return hitpoints;
+
+    // Multipoint
+    auto hitboxmin    = hb->min;
+    auto hitboxmax    = hb->max;
+    auto hitboxcenter = hb->center;
+
+    float minx, miny, minz, maxx, maxy, maxz, centerx, centery, centerz;
+    // get positions
+    minx    = hitboxmin.x;
+    miny    = hitboxmin.y;
+    maxx    = hitboxmax.x;
+    maxy    = hitboxmax.y;
+    minz    = hitboxmin.z;
+    maxz    = hitboxmax.z;
+    centerx = hitboxcenter.x;
+    centery = hitboxcenter.y;
+    centerz = hitboxcenter.z;
+
+    float shrink_size = 1;
+    switch (*multipoint)
+    {
+    // Shrink alot
+    case 1:
+        shrink_size = 3;
+        break;
+    // Slightly shrink
+    case 2:
+        shrink_size = 5;
+        break;
+    // Shrink very little (we still have to shrink a bit else we will wiff due to rotation)
+    case 3:
+        shrink_size = 7;
+        break;
+    default:
+        shrink_size = 6;
+    }
+
+    // Shrink positions
+    minx += (maxx - minx) / shrink_size;
+    maxx -= (maxx - minx) / shrink_size;
+    maxy -= (maxy - miny) / shrink_size;
+    miny += (maxy - miny) / shrink_size;
+    maxz -= (maxz - minz) / shrink_size;
+    minz += (maxz - minz) / shrink_size;
+
+    // Create Vectors
+    const Vector positions[21] = { { minx, miny, minz }, { minx, maxy, minz }, { minx, miny, maxz }, { minx, maxy, maxz }, { maxx, maxy, maxz }, { maxx, miny, maxz }, { maxx, maxy, minz }, { maxx, miny, minz }, { minx, centery, minz }, { maxx, centery, minz }, { minx, centery, maxz }, { maxx, centery, maxz }, { centerx, miny, minz }, { centerx, maxy, minz }, { centerx, miny, maxz }, { centerx, maxy, maxz }, { minx, miny, centerz }, { maxx, maxy, centerz }, { minx, miny, centerz }, { maxx, maxy, centerz }, hitboxcenter };
+    for (int i = 0; i < 21; ++i)
+    {
+        trace_t trace;
+        if (IsEntityVectorVisible(ent, positions[i], true, MASK_SHOT_HULL, &trace))
+        {
+            if (trace.hitbox == hitbox)
+                hitpoints.push_back(positions[i]);
+        }
+    }
+
+    return hitpoints;
+}
+
+// Get the best point to aim at for a given hitbox
+static std::optional<Vector> getBestHitpoint(CachedEntity *ent, int hitbox)
+{
+    auto positions = getValidHitpoints(ent, hitbox);
+
+    std::optional<Vector> best_pos = std::nullopt;
+    float max_score                = FLT_MAX;
+    for (auto &position : positions)
+    {
+        float score = GetFov(g_pLocalPlayer->v_Eye, current_user_cmd->viewangles, position);
+        if (score < max_score)
+        {
+            best_pos  = position;
+            max_score = score;
+        }
+    }
+
+    return best_pos;
 }
 
 #if ENABLE_VISUALS
@@ -971,45 +1067,6 @@ void Aim(CachedEntity *entity)
     // Get angles from eye to target
     Vector angles = GetAimAtAngles(g_pLocalPlayer->v_Eye, PredictEntity(entity, false));
 
-    // Multipoint
-    if (multipoint && !projectile_mode && entity->m_Type() == ENTITY_PLAYER)
-    {
-        // Get hitbox num
-        AimbotCalculatedData_s &cd = calculated_data_array[entity->m_IDX];
-        float minx, maxx, miny, maxy, minz, maxz, centerx, centery, centerz;
-        auto hb           = entity->hitboxes.GetHitbox(cd.hitbox);
-        auto hitboxmin    = hb->min;
-        auto hitboxmax    = hb->max;
-        auto hitboxcenter = hb->center;
-
-        // get positions
-        minx    = hitboxmin.x;
-        miny    = hitboxmin.y;
-        maxx    = hitboxmax.x;
-        maxy    = hitboxmax.y;
-        minz    = hitboxmin.z;
-        maxz    = hitboxmax.z;
-        centerx = hitboxcenter.x;
-        centery = hitboxcenter.y;
-        centerz = hitboxcenter.z;
-
-        // Shrink positions
-        minx += (maxx - minx) / 6;
-        maxx -= (maxx - minx) / 6;
-        maxy -= (maxy - miny) / 6;
-        miny += (maxy - miny) / 6;
-        maxz -= (maxz - minz) / 6;
-        minz += (maxz - minz) / 6;
-        // Create Vectors
-        const Vector positions[13] = { { minx, centery, minz }, { maxx, centery, minz }, { minx, centery, maxz }, { maxx, centery, maxz }, { centerx, miny, minz }, { centerx, maxy, minz }, { centerx, miny, maxz }, { centerx, maxy, maxz }, { minx, miny, centerz }, { maxx, maxy, centerz }, { minx, miny, centerz }, { maxx, maxy, centerz }, hitboxcenter };
-        for (int i = 0; i < 13; ++i)
-            if (IsEntityVectorVisible(entity, positions[i], true))
-            {
-                angles = GetAimAtAngles(g_pLocalPlayer->v_Eye, positions[i]);
-                break;
-            }
-    }
-
     // Slow aim
     if (slow_aim)
         DoSlowAim(angles);
@@ -1166,7 +1223,14 @@ Vector PredictEntity(CachedEntity *entity, bool vischeck)
                 result = SimpleLatencyPrediction(entity, cd.hitbox);
             // else just grab strait from the hitbox
             else
-                GetHitbox(entity, cd.hitbox, result);
+            {
+                // Allow multipoint logic to run
+                std::optional<Vector> best_pos = getBestHitpoint(entity, cd.hitbox);
+                if (best_pos)
+                    result = *best_pos;
+                else
+                    GetHitbox(entity, cd.hitbox, result);
+            }
         }
     }
     // Buildings

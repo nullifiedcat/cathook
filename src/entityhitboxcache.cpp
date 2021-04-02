@@ -174,17 +174,12 @@ matrix3x4_t *EntityHitboxCache::GetBones(int numbones)
         if (g_Settings.is_create_move)
         {
             PROF_SECTION(bone_setup);
-#if !ENABLE_TEXTMODE
 
             // Only use reconstructed setupbones on players
             if (parent_ref->m_Type() == ENTITY_PLAYER)
                 bones_setup = setupbones_reconst::SetupBones(RAW_ENT(parent_ref), bones.data(), 0x7FF00);
             else
                 bones_setup = RAW_ENT(parent_ref)->SetupBones(bones.data(), numbones, 0x7FF00, bones_setup_time);
-#else
-            // Textmode bots miss/shoot at nothing when the tf2 bonecache is used
-            bones_setup = RAW_ENT(parent_ref)->SetupBones(bones.data(), numbones, 0x7FF00, bones_setup_time);
-#endif
         }
     }
     return bones.data();

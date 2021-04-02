@@ -82,7 +82,14 @@
                 </Select>
             </LabeledObject>
             <AutoVariable width="fill" target="aimbot.target.max-range" label="Max range" tooltip="Entities further than this distance will not be targeted. Measured in Hammer units."/>
-            <AutoVariable width="fill" target="aimbot.multipoint" label="Multipoint"/>
+            <LabeledObject width="fill" label="Multipoint">
+                <Select target="aimbot.multipoint">
+                    <Option name="Disabled" value="0"/>
+                    <Option name="Small hitboxes" value="1"/>
+                    <Option name="Medium hitboxes" value="2"/>
+                    <Option name="Big hitboxes" value="3"/>
+                </Select>
+            </LabeledObject>
             <AutoVariable width="fill" target="aimbot.assistance.only" label="Assistance only" tooltip="Aimbot will only activate if your mouse has moved in the last half second."/>
             <AutoVariable width="fill" target="aimbot.lock-target" label="Lock target" tooltip="Lock onto a target until they die or leave your FOV."/>
             <AutoVariable width="fill" target="aimbot.target.ignore-non-rage" label="Rage only" tooltip="Only target players set to RAGE."/>
