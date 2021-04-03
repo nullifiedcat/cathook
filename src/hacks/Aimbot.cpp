@@ -159,7 +159,7 @@ static std::vector<Vector> getValidHitpoints(CachedEntity *ent, int hitbox)
         break;
     // Decently shrink
     case 2:
-        shrink_size = 6;
+        shrink_size = 5;
         break;
     // Shrink very little (we still have to shrink a bit else we will wiff due to rotation)
     case 3:
