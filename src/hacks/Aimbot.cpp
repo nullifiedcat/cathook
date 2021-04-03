@@ -118,6 +118,8 @@ static void spectatorUpdate()
     };
 }
 
+#define GET_MIDDLE(c1, c2) (corners[c1] + corners[c2]) / 2.0f
+
 // Get all the valid aim positions
 static std::vector<Vector> getValidHitpoints(CachedEntity *ent, int hitbox)
 {
@@ -136,21 +138,17 @@ static std::vector<Vector> getValidHitpoints(CachedEntity *ent, int hitbox)
         return hitpoints;
 
     // Multipoint
-    auto hitboxmin    = hb->min;
-    auto hitboxmax    = hb->max;
-    auto hitboxcenter = hb->center;
+    auto bboxmin = hb->bbox->bbmin;
+    auto bboxmax = hb->bbox->bbmax;
 
-    float minx, miny, minz, maxx, maxy, maxz, centerx, centery, centerz;
-    // get positions
-    minx    = hitboxmin.x;
-    miny    = hitboxmin.y;
-    maxx    = hitboxmax.x;
-    maxy    = hitboxmax.y;
-    minz    = hitboxmin.z;
-    maxz    = hitboxmax.z;
-    centerx = hitboxcenter.x;
-    centery = hitboxcenter.y;
-    centerz = hitboxcenter.z;
+    auto transform = ent->hitboxes.GetBones()[hb->bbox->bone];
+    QAngle rotation;
+    Vector origin;
+
+    MatrixAngles(transform, rotation, origin);
+
+    Vector corners[8];
+    GenerateBoxVertices(origin, rotation, bboxmin, bboxmax, corners);
 
     float shrink_size = 1;
     switch (*multipoint)
@@ -159,29 +157,35 @@ static std::vector<Vector> getValidHitpoints(CachedEntity *ent, int hitbox)
     case 1:
         shrink_size = 3;
         break;
-    // Slightly shrink
+    // Decently shrink
     case 2:
-        shrink_size = 5;
+        shrink_size = 6;
         break;
     // Shrink very little (we still have to shrink a bit else we will wiff due to rotation)
     case 3:
-        shrink_size = 7;
+        shrink_size = 10;
         break;
     default:
         shrink_size = 6;
     }
 
-    // Shrink positions
-    minx += (maxx - minx) / shrink_size;
-    maxx -= (maxx - minx) / shrink_size;
-    maxy -= (maxy - miny) / shrink_size;
-    miny += (maxy - miny) / shrink_size;
-    maxz -= (maxz - minz) / shrink_size;
-    minz += (maxz - minz) / shrink_size;
+    // Shrink positions by moving towards opposing corner
+    for (int i = 0; i < 8; i++)
+        corners[i] += (corners[7 - i] - corners[i]) / shrink_size;
 
-    // Create Vectors
-    const Vector positions[21] = { { minx, miny, minz }, { minx, maxy, minz }, { minx, miny, maxz }, { minx, maxy, maxz }, { maxx, maxy, maxz }, { maxx, miny, maxz }, { maxx, maxy, minz }, { maxx, miny, minz }, { minx, centery, minz }, { maxx, centery, minz }, { minx, centery, maxz }, { maxx, centery, maxz }, { centerx, miny, minz }, { centerx, maxy, minz }, { centerx, miny, maxz }, { centerx, maxy, maxz }, { minx, miny, centerz }, { maxx, maxy, centerz }, { minx, miny, centerz }, { maxx, maxy, centerz }, hitboxcenter };
-    for (int i = 0; i < 21; ++i)
+    // Generate middle points on line segments
+    // Define cleans up code
+
+    const Vector line_positions[12] = { GET_MIDDLE(0, 1), GET_MIDDLE(0, 2), GET_MIDDLE(1, 3), GET_MIDDLE(2, 3), GET_MIDDLE(7, 6), GET_MIDDLE(7, 5), GET_MIDDLE(6, 4), GET_MIDDLE(5, 4), GET_MIDDLE(0, 4), GET_MIDDLE(1, 5), GET_MIDDLE(2, 6), GET_MIDDLE(3, 7) };
+
+    // Create combined vector
+    std::vector<Vector> positions;
+
+    positions.reserve(sizeof(Vector) * 20);
+    positions.insert(positions.end(), corners, &corners[8]);
+    positions.insert(positions.end(), line_positions, &line_positions[12]);
+
+    for (int i = 0; i < 20; ++i)
     {
         trace_t trace;
         if (IsEntityVectorVisible(ent, positions[i], true, MASK_SHOT_HULL, &trace))
@@ -203,7 +207,7 @@ static std::optional<Vector> getBestHitpoint(CachedEntity *ent, int hitbox)
     float max_score                = FLT_MAX;
     for (auto &position : positions)
     {
-        float score = GetFov(g_pLocalPlayer->v_Eye, current_user_cmd->viewangles, position);
+        float score = GetFov(g_pLocalPlayer->v_OrigViewangles, g_pLocalPlayer->v_Eye, position);
         if (score < max_score)
         {
             best_pos  = position;
