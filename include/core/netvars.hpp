@@ -184,6 +184,9 @@ public:
     offset_t m_bViewingCYOAPDA;
     offset_t m_angEyeAnglesLocal;
     offset_t m_nSequence;
+    offset_t m_flPoseParameter;
+    offset_t m_flModelScale;
+    offset_t m_flEncodedController;
     offset_t m_flSimulationTime;
     offset_t m_flAnimTime;
     offset_t m_flCycle;

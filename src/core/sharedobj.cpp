@@ -127,6 +127,7 @@ void LoadAllSharedObjects()
     {
         steamclient().Load();
         client().Load();
+        server().Load();
         steamapi().Load();
         vstdlib().Load();
         inputsystem().Load();
@@ -225,6 +226,12 @@ SharedObject &datacache()
 SharedObject &vgui2()
 {
     static SharedObject obj("vgui2.so", true);
+    return obj;
+}
+
+SharedObject &server()
+{
+    static SharedObject obj("server.so", true);
     return obj;
 }
 

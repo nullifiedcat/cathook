@@ -109,6 +109,7 @@ Vector vectorAbs(Vector i);
 bool canReachVector(Vector loc, Vector dest = { 0, 0, 0 });
 
 bool LineIntersectsBox(Vector &bmin, Vector &bmax, Vector &lmin, Vector &lmax);
+void GenerateBoxVertices(const Vector &vOrigin, const QAngle &angles, const Vector &vMins, const Vector &vMaxs, Vector pVerts[8]);
 
 float DistToSqr(CachedEntity *entity);
 void fClampAngle(Vector &qaAng);

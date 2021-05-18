@@ -51,6 +51,7 @@ SharedObject &materialsystem();
 SharedObject &filesystem_stdio();
 SharedObject &datacache();
 SharedObject &vgui2();
+SharedObject &server();
 #if ENABLE_VISUALS
 SharedObject &vguimatsurface();
 SharedObject &studiorender();

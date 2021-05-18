@@ -58,6 +58,7 @@ int *g_PredictionRandomSeed              = nullptr;
 IFileSystem *g_IFileSystem               = nullptr;
 IMDLCache *g_IMDLCache                   = nullptr;
 IToolFrameworkInternal *g_IToolFramework = nullptr;
+CServerTools *g_IServerTools             = nullptr;
 
 template <typename T> T *BruteforceInterface(std::string name, sharedobj::SharedObject &object, int start = 0)
 {
@@ -106,6 +107,7 @@ void CreateInterfaces()
     g_IBaseClient       = BruteforceInterface<IBaseClientDLL>("VClient", sharedobj::client());
     g_ITrace            = BruteforceInterface<IEngineTrace>("EngineTraceClient", sharedobj::engine());
     g_IInputSystem      = BruteforceInterface<IInputSystem>("InputSystemVersion", sharedobj::inputsystem());
+    g_IServerTools      = BruteforceInterface<CServerTools>("VSERVERTOOLS", sharedobj::server());
 
     logging::Info("Initing SteamAPI");
     GetHSteamPipe_t GetHSteamPipe = reinterpret_cast<GetHSteamPipe_t>(dlsym(sharedobj::steamapi().lmap, "SteamAPI_GetHSteamPipe"));

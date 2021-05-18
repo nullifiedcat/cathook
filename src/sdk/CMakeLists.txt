@@ -1,11 +1,16 @@
-set(files "${CMAKE_CURRENT_LIST_DIR}/checksum_crc.cpp"
+set(files "${CMAKE_CURRENT_LIST_DIR}/basically_the_whole_mathlib.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/checksum_crc.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/checksum_md5.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/convar.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/CServerTools.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/HUD.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/KeyValues.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/MaterialSystemUtil.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/tier1.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/setup_bones.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/studio.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/utlbuffer.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/utlsymbol.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/UtlString.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/netmessage.cpp")
 target_sources(cathook PRIVATE ${files})
