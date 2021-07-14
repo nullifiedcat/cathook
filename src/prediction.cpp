@@ -10,6 +10,8 @@
 
 static settings::Boolean debug_pp_extrapolate{ "debug.pp-extrapolate", "false" };
 static settings::Boolean debug_pp_draw{ "debug.pp-draw", "false" };
+static settings::Boolean debug_pp_bsearch{ "debug.pp-bsearch", "false" };
+static settings::Boolean debug_pp_gravity{ "debug.pp-gravity", "false" };
 // The higher the sample size, the more previous positions we will take into account to calculate the next position. Lower = Faster reaction Higher = Stability
 static settings::Int sample_size("debug.strafepred.samplesize", "10");
 // TODO there is a Vector() object created each call.
@@ -352,25 +354,77 @@ std::pair<Vector, Vector> ProjectilePrediction_Engine(CachedEntity *ent, int hb,
     float steplength = ((float) (2 * range) / (float) maxsteps);
     Vector ent_mins  = RAW_ENT(ent)->GetCollideable()->OBBMins();
     Vector ent_maxs  = RAW_ENT(ent)->GetCollideable()->OBBMaxs();
-    for (int steps = 0; steps < maxsteps; steps++, currenttime += steplength)
+    float grav_mul   = sv_gravity->GetFloat() / 2.0f * gravitymod;
+    if (debug_pp_bsearch)
     {
-        ent->m_vecOrigin() = current;
-        current            = EnginePrediction(ent, steplength);
+        float mintime = currenttime, maxtime = currenttime + range * 2;
 
-        if (onground)
+        for (int steps = 0; steps < maxsteps; steps++)
         {
-            float toground = DistanceToGround(current, ent_mins, ent_maxs);
-            current.z -= toground;
+            Vector minloc = EnginePrediction(ent, mintime);
+            Vector maxloc = EnginePrediction(ent, maxtime);
+
+            if (onground)
+            {
+                minloc.z -= DistanceToGround(minloc, ent_mins, ent_maxs);
+                maxloc.z -= DistanceToGround(maxloc, ent_mins, ent_maxs);
+            }
+
+            if (debug_pp_gravity)
+            {
+                minloc.z += grav_mul * pow(mintime, 2);
+                maxloc.z += grav_mul * pow(maxtime, 2);
+            }
+
+            const float minairtime = g_pLocalPlayer->v_Eye.DistTo(minloc) / speed;
+            const float maxairtime = g_pLocalPlayer->v_Eye.DistTo(maxloc) / speed;
+
+            const float mindelta = abs(minairtime - mintime);
+            const float maxdelta = abs(maxairtime - maxtime);
+
+            const float midtime = (mintime + maxtime) / 2.0f;
+
+            if (mindelta < maxdelta)
+            {
+                maxtime  = midtime;
+                besttime = mintime;
+                bestpos  = minloc;
+            }
+            else
+            {
+                mintime  = midtime;
+                besttime = maxtime;
+                bestpos  = maxloc;
+            }
         }
-
-        float rockettime = g_pLocalPlayer->v_Eye.DistTo(current) / speed;
-        // Compensate for ping
-        // rockettime += g_IEngine->GetNetChannelInfo()->GetLatency(FLOW_OUTGOING) + cl_interp->GetFloat();
-        if (fabs(rockettime - currenttime) < mindelta)
+    }
+    else
+    {
+        for (int steps = 0; steps < maxsteps; steps++, currenttime += steplength)
         {
-            besttime = currenttime;
-            bestpos  = current;
-            mindelta = fabs(rockettime - currenttime);
+            ent->m_vecOrigin() = current;
+            current            = EnginePrediction(ent, steplength);
+
+            if (onground)
+            {
+                float toground = DistanceToGround(current, ent_mins, ent_maxs);
+                current.z -= toground;
+            }
+
+            if (debug_pp_gravity)
+            {
+                current.z += grav_mul * pow(currenttime, 2);
+            }
+
+            float rockettime = g_pLocalPlayer->v_Eye.DistTo(current) / speed;
+            // Compensate for ping
+            // rockettime += g_IEngine->GetNetChannelInfo()->GetLatency(FLOW_OUTGOING) + cl_interp->GetFloat();
+            if (fabs(rockettime - currenttime) < mindelta)
+            {
+                besttime = currenttime;
+                bestpos  = current;
+                mindelta = fabs(rockettime - currenttime);
+            }
         }
     }
     const_cast<Vector &>(RAW_ENT(ent)->GetAbsOrigin()) = origin;
@@ -474,29 +528,82 @@ std::pair<Vector, Vector> ProjectilePrediction(CachedEntity *ent, int hb, float 
     Vector acceleration = { 0.0f, 0.0f, -sv_gravity->GetFloat() * entgmod };
     float steplength    = ((float) (2 * range) / (float) maxsteps);
     auto minmax         = std::make_pair(RAW_ENT(ent)->GetCollideable()->OBBMins(), RAW_ENT(ent)->GetCollideable()->OBBMaxs());
+    float grav_mul      = sv_gravity->GetFloat() / 2.0f * gravitymod;
 
     Vector last = origin;
 
     auto strafe_pred = initializeStrafePrediction(ent);
 
-    for (int steps = 0; steps < maxsteps; steps++, currenttime += steplength)
+    if (debug_pp_bsearch)
     {
-        current = last = PredictStep(last, velocity, acceleration, &minmax, steplength, strafe_pred ? &*strafe_pred : nullptr);
+        Vector stepvel = velocity;
+        float mintime = currenttime, maxtime = currenttime + range * 2;
 
-        if (onground)
+        for (int steps = 0; steps < maxsteps; steps++)
         {
-            float toground = DistanceToGround(current, minmax.first, minmax.second);
-            current.z -= toground;
+            const float latency = g_IEngine->GetNetChannelInfo()->GetLatency(FLOW_OUTGOING) + cl_interp->GetFloat();
+
+            // Hack as PredictStep() updates velocity
+            stepvel = velocity;
+            Vector minloc = PredictStep(origin, velocity, acceleration, &minmax, mintime, strafe_pred ? &*strafe_pred : nullptr);
+            stepvel = velocity;
+            Vector maxloc = PredictStep(origin, velocity, acceleration, &minmax, maxtime, strafe_pred ? &*strafe_pred : nullptr);
+
+            if (onground)
+            {
+                minloc.z -= DistanceToGround(minloc, minmax.first, minmax.second);
+                maxloc.z -= DistanceToGround(maxloc, minmax.first, minmax.second);
+            }
+
+            if (debug_pp_gravity)
+            {
+                minloc.z += grav_mul * pow(mintime, 2);
+                maxloc.z += grav_mul * pow(maxtime, 2);
+            }
+
+            const float minairtime = latency + g_pLocalPlayer->v_Eye.DistTo(minloc) / speed;
+            const float maxairtime = latency + g_pLocalPlayer->v_Eye.DistTo(maxloc) / speed;
+
+            const float mindelta = abs(minairtime - mintime);
+            const float maxdelta = abs(maxairtime - maxtime);
+
+            const float midtime = (mintime + maxtime) / 2.0f;
+
+            if (mindelta < maxdelta)
+            {
+                maxtime  = midtime;
+                besttime = mintime;
+                bestpos  = minloc;
+            }
+            else
+            {
+                mintime  = midtime;
+                besttime = maxtime;
+                bestpos  = maxloc;
+            }
         }
-
-        float rockettime = g_pLocalPlayer->v_Eye.DistTo(current) / speed;
-        // Compensate for ping
-        rockettime += g_IEngine->GetNetChannelInfo()->GetLatency(FLOW_OUTGOING) + cl_interp->GetFloat();
-        if (fabs(rockettime - currenttime) < mindelta)
+    }
+    else
+    {
+        for (int steps = 0; steps < maxsteps; steps++, currenttime += steplength)
         {
-            besttime = currenttime;
-            bestpos  = current;
-            mindelta = fabs(rockettime - currenttime);
+            current = last = PredictStep(last, velocity, acceleration, &minmax, steplength, strafe_pred ? &*strafe_pred : nullptr);
+
+            if (onground)
+            {
+                float toground = DistanceToGround(current, minmax.first, minmax.second);
+                current.z -= toground;
+            }
+
+            float rockettime = g_pLocalPlayer->v_Eye.DistTo(current) / speed;
+            // Compensate for ping
+            rockettime += g_IEngine->GetNetChannelInfo()->GetLatency(FLOW_OUTGOING) + cl_interp->GetFloat();
+            if (fabs(rockettime - currenttime) < mindelta)
+            {
+                besttime = currenttime;
+                bestpos  = current;
+                mindelta = fabs(rockettime - currenttime);
+            }
         }
     }
     // Compensate for ping

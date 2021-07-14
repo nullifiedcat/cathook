@@ -9,6 +9,8 @@
             <AutoVariable width="fill" target="debug.log-dispatch-user-msg" label="Log dispatched user messages"/>
             <AutoVariable width="fill" target="debug.log-sent-chat" label="Log sent chat"/>
             <AutoVariable width="fill" target="debug.pp-extrapolate" label="PP extrapolate"/>
+            <AutoVariable width="fill" target="debug.pp-bsearch" label="PP binary search"/>
+            <AutoVariable width="fill" target="debug.pp-gravity" label="PP gravity"/>
             <AutoVariable width="fill" target="debug.pp-rocket-time-ping" label="PP rocket time ping"/>
             <AutoVariable width="fill" target="debug.projectiles" label="Debug projectiles"/>
             <AutoVariable width="fill" target="debug.tcm" label="Debug TCM"/>
